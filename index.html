@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>廃屋脱出</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html, body { width:100%; height:100%; background:#000; font-family:'Courier New',monospace; overflow:hidden; user-select:none; }
+#app { width:100%; height:100vh; display:flex; align-items:center; justify-content:center; background:#000; }
+#gameWrap { position:relative; width:100%; height:100%; max-width:480px; max-height:900px; margin:0 auto; background:#000; overflow:hidden; }
+.screen { position:absolute; inset:0; display:none; flex-direction:column; align-items:center; justify-content:center; background:#000; }
+.screen.active { display:flex; }
+
+/* ══ タイトル ══ */
+#titleScreen img.bg { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; filter:brightness(0.6); }
+#titleScreen .overlay { position:absolute; inset:0; background:radial-gradient(ellipse 80% 60% at 50% 50%, transparent 20%, rgba(0,0,0,0.8) 100%); }
+#titleScreen .content { position:relative; z-index:2; text-align:center; color:#c8a060; }
+#titleScreen h1 { font-size:1.7rem; letter-spacing:0.35em; margin-bottom:6px; text-shadow:0 0 24px rgba(180,30,30,0.7); animation:flicker 4s infinite; }
+#titleScreen .sub { font-size:0.6rem; letter-spacing:0.22em; color:#6a5030; margin-bottom:70px; }
+#startBtn { background:rgba(8,3,3,0.75); border:1px solid #8b2020; color:#d0a050; padding:14px 52px; font-family:'Courier New',monospace; font-size:0.9rem; letter-spacing:0.3em; cursor:pointer; animation:btnPulse 2.5s infinite; }
+@keyframes btnPulse { 0%,100%{box-shadow:0 0 8px rgba(180,30,30,0.3)} 50%{box-shadow:0 0 22px rgba(180,30,30,0.6)} }
+@keyframes flicker { 0%,90%,100%{opacity:1} 91%{opacity:0.25} 92%{opacity:1} 95%{opacity:0.08} 96%{opacity:1} }
+
+/* ══ ストーリー画面 ══ */
+#storyScreen { background:#000; padding:0; justify-content:flex-start; }
+#storyScreen .story-bg { position:absolute; inset:0; width:100%; height:100%; object-fit:cover; filter:brightness(0.3); }
+#storyScreen .story-content { position:relative; z-index:2; width:100%; height:100%; display:flex; flex-direction:column; justify-content:center; align-items:center; padding:40px 28px; }
+.story-line { font-size:0.82rem; color:#b89060; line-height:2.2; text-align:center; letter-spacing:0.08em; opacity:0; transform:translateY(8px); transition:opacity 0.8s ease, transform 0.8s ease; margin-bottom:4px; }
+.story-line.show { opacity:1; transform:translateY(0); }
+.story-line.red { color:#cc4040; }
+#storyNext { margin-top:48px; background:rgba(8,3,3,0.8); border:1px solid #6a1818; color:#c08040; padding:12px 40px; font-family:'Courier New',monospace; font-size:0.78rem; letter-spacing:0.2em; cursor:pointer; opacity:0; transition:opacity 0.6s; }
+#storyNext.show { opacity:1; }
+
+/* ══ ゲーム ══ */
+#gameScreen { position:absolute; inset:0; }
+#roomImg { position:absolute; inset:0; width:100%; height:100%; object-fit:contain; background:#030201; opacity:1; transition:opacity 0.25s ease; }
+#roomImg.fading { opacity:0.15; }
+
+/* トップバー */
+#topBar { position:absolute; top:0; left:0; right:0; z-index:30; display:flex; align-items:center; justify-content:space-between; padding:12px 14px; background:linear-gradient(180deg,rgba(0,0,0,0.82) 0%,transparent 100%); }
+#lifeWrap { display:flex; align-items:center; gap:5px; font-size:0.7rem; color:#b89040; }
+.lifeDot { width:9px; height:9px; border-radius:50%; background:#7a1010; box-shadow:0 0 5px #7a1010; }
+#topBtns { display:flex; gap:6px; }
+.topBtn { background:rgba(0,0,0,0.72); border:1px solid rgba(70,55,25,0.55); color:rgba(170,140,80,0.8); padding:5px 11px; font-size:0.6rem; font-family:monospace; letter-spacing:0.12em; cursor:pointer; }
+
+/* ホットスポット */
+.hotspot { position:absolute; cursor:pointer; }
+.hotspot .hint { position:absolute; bottom:calc(100% + 4px); left:50%; transform:translateX(-50%); background:rgba(0,0,0,0.88); border:1px solid rgba(90,70,25,0.7); color:rgba(210,175,90,0.95); font-size:0.58rem; padding:3px 8px; white-space:nowrap; opacity:0; pointer-events:none; transition:opacity 0.12s; }
+.hotspot.show-hint .hint { opacity:1; }
+
+/* ナビ矢印 */
+.navArrow { position:absolute; width:54px; height:54px; border-radius:50%; background:rgba(0,0,0,0.55); border:1px solid rgba(180,140,80,0.4); display:flex; align-items:center; justify-content:center; color:rgba(210,180,120,0.85); font-size:1.4rem; cursor:pointer; z-index:25; transition:background 0.15s; }
+.navArrow:active { background:rgba(120,40,40,0.55); }
+
+/* 部屋ラベル */
+#roomLabel { position:absolute; bottom:0; left:0; right:0; z-index:15; padding:10px 14px 8px; font-size:0.6rem; color:rgba(180,150,100,0.7); letter-spacing:0.25em; text-transform:uppercase; background:linear-gradient(0deg,rgba(0,0,0,0.72) 0%,transparent 100%); pointer-events:none; }
+
+/* テキスト */
+#textBox { position:absolute; bottom:0; left:0; right:0; z-index:35; background:linear-gradient(0deg,rgba(4,2,2,0.97) 60%,rgba(4,2,2,0.55) 100%); border-top:1px solid #1c1208; padding:12px 16px; min-height:58px; max-height:32%; overflow-y:auto; font-size:0.76rem; line-height:1.85; color:#a89060; white-space:pre-line; transition:transform 0.3s,opacity 0.3s; }
+#textBox.hidden { transform:translateY(100%); opacity:0; pointer-events:none; }
+#textBox.ev { color:#c8a860; }
+
+/* アイテムバー */
+#itemBar { position:absolute; top:54px; right:10px; z-index:30; display:flex; flex-direction:column; gap:6px; }
+.itemSlot { width:54px; height:54px; border:2px solid #4a3010; background:linear-gradient(145deg,#180e04,#0a0602); display:flex; align-items:center; justify-content:center; overflow:hidden; position:relative; cursor:pointer; }
+.itemSlot img { width:80%; height:80%; object-fit:contain; }
+.itemSlot .slotLabel { position:absolute; bottom:1px; left:0; right:0; text-align:center; font-size:0.42rem; color:#c8a040; background:rgba(0,0,0,0.72); line-height:1.3; }
+
+/* ══ メモ用紙拡大ポップアップ ══ */
+#memoPopup { position:absolute; inset:0; z-index:120; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,0.88); }
+#memoPopup.active { display:flex; }
+#memoPopup .memoCard { position:relative; width:82%; max-width:320px; }
+#memoPopup .memoCard img { width:100%; display:block; border:2px solid #5a4820; box-shadow:0 0 40px rgba(0,0,0,0.8); }
+#memoPopup .memoClose { position:absolute; top:-14px; right:-14px; width:32px; height:32px; border-radius:50%; background:#1a0808; border:1px solid #8b2020; color:#cc4040; font-size:1rem; display:flex; align-items:center; justify-content:center; cursor:pointer; }
+#memoPopup .memoHint { text-align:center; margin-top:10px; font-size:0.6rem; color:#6a5030; letter-spacing:0.1em; }
+
+/* アイテム詳細 */
+#itemDetail { position:absolute; inset:0; z-index:110; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,0.78); }
+#itemDetail.active { display:flex; }
+#itemDetail .dcard { background:linear-gradient(145deg,#1e1a12,#141008); border:2px solid #5a4820; box-shadow:0 0 40px rgba(120,90,30,0.5); padding:28px 36px; text-align:center; min-width:200px; }
+#itemDetail .dcard img { width:100px; height:100px; object-fit:contain; margin-bottom:10px; }
+#itemDetail .dname { font-size:0.9rem; color:#c8a840; margin-bottom:8px; }
+#itemDetail .ddesc { font-size:0.68rem; color:#8a7030; line-height:1.7; margin-bottom:16px; white-space:pre-line; }
+#itemDetail .dclose { background:#0e0604; border:1px solid #601818; color:#b04040; padding:7px 20px; font-family:monospace; font-size:0.7rem; cursor:pointer; letter-spacing:0.1em; }
+
+/* ══ パズル ══ */
+#puzzleBox { position:absolute; inset:0; z-index:130; display:none; flex-direction:column; align-items:center; justify-content:center; background:rgba(0,0,0,0.92); gap:16px; }
+#puzzleBox.active { display:flex; }
+#puzzleBox .ptitle { font-size:0.75rem; color:#c0a040; letter-spacing:0.18em; }
+#puzzleBox .psubtitle { font-size:0.6rem; color:#6a5020; letter-spacing:0.1em; }
+.pinputs { display:flex; gap:10px; }
+.pdigit { width:52px; height:64px; background:#0c0804; border:1px solid #3c2010; color:#e0d0a0; font-size:1.8rem; text-align:center; font-family:monospace; outline:none; border-radius:3px; }
+.pdigit:focus { border-color:#8b1a1a; background:#180a04; }
+#puzzleResult { font-size:0.72rem; min-height:20px; letter-spacing:0.05em; }
+#puzzleResult.ok { color:#50b850; }
+#puzzleResult.ng { color:#b83030; }
+.pbtns { display:flex; gap:12px; }
+.pbtn { background:#0e0604; border:1px solid #601818; color:#b04040; padding:10px 24px; font-family:monospace; font-size:0.75rem; letter-spacing:0.1em; cursor:pointer; }
+.pbtn.cancel { border-color:#3c2c14; color:#8a7050; }
+
+/* ジャンプスケア */
+#scareOverlay { position:absolute; inset:0; z-index:200; display:none; background:#000; }
+#scareOverlay img { width:100%; height:100%; object-fit:contain; background:#000; animation:scareShake 0.5s ease; }
+@keyframes scareShake { 0%,100%{transform:translate(0)} 15%{transform:translate(-12px,9px) rotate(-2deg)} 30%{transform:translate(12px,-9px) rotate(2deg)} 50%{transform:translate(-7px,5px)} 70%{transform:translate(7px,-5px)} }
+
+/* アイテム入手ポップアップ */
+#itemPopup { position:absolute; inset:0; z-index:150; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,0.6); pointer-events:none; }
+#itemPopup.active { display:flex; }
+#itemPopup .card { background:linear-gradient(145deg,#1e1a12,#141008); border:2px solid #5a4820; box-shadow:0 0 40px rgba(120,90,30,0.5); padding:26px 36px; text-align:center; min-width:200px; animation:popIn 0.35s cubic-bezier(0.34,1.56,0.64,1) forwards; }
+#itemPopup .card img { width:80px; height:80px; object-fit:contain; margin-bottom:10px; }
+#itemPopup .plabel { font-size:0.58rem; color:#8a7030; letter-spacing:0.25em; text-transform:uppercase; margin-bottom:6px; }
+#itemPopup .pname { font-size:0.9rem; color:#c8a840; letter-spacing:0.08em; }
+@keyframes popIn { 0%{opacity:0;transform:scale(0.6) translateY(20px)} 100%{opacity:1;transform:scale(1) translateY(0)} }
+@keyframes popOut { 0%{opacity:1;transform:scale(1)} 100%{opacity:0;transform:scale(0.85) translateY(-10px)} }
+#itemPopup .card.out { animation:popOut 0.35s ease forwards; }
+
+/* MAP */
+#mapPanel { position:absolute; inset:0; z-index:60; display:none; align-items:center; justify-content:center; background:rgba(0,0,0,0.93); }
+#mapPanel.active { display:flex; }
+#mapPanel .box { background:#080604; border:1px solid #1c1408; padding:22px 28px; width:78%; max-width:280px; }
+#mapPanel .mtitle { font-size:0.68rem; color:#483218; letter-spacing:0.2em; text-transform:uppercase; margin-bottom:14px; }
+.maprow { display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid #100c06; font-size:0.7rem; }
+.mapdot { width:9px; height:9px; border-radius:50%; border:1px solid #281808; flex-shrink:0; }
+.mapdot.cur { background:#781818; border-color:#781818; }
+.mapdot.vis { background:#281808; border-color:#382010; }
+#mapPanel .mclose { margin-top:12px; font-size:0.55rem; color:#382810; text-align:center; letter-spacing:0.1em; }
+
+/* エンディング */
+#endScreen { position:absolute; inset:0; z-index:300; display:none; flex-direction:column; align-items:center; justify-content:center; text-align:center; background:#000; padding:36px 28px; }
+#endScreen.active { display:flex; animation:fadeIn 1.4s ease; }
+@keyframes fadeIn { from{opacity:0}to{opacity:1} }
+.etitle { font-size:1.7rem; color:#b89040; letter-spacing:0.1em; margin-bottom:18px; text-shadow:0 0 30px rgba(184,144,64,0.6); animation:flicker 4.5s infinite; }
+.edesc { font-size:0.72rem; color:#584528; line-height:2; margin-bottom:28px; max-width:280px; white-space:pre-line; }
+.ebtn { background:#0e0804; border:1px solid #382010; color:#987840; padding:10px 28px; font-family:monospace; font-size:0.76rem; letter-spacing:0.1em; cursor:pointer; }
+</style>
+</head>
+<body>
+<div id="app"><div id="gameWrap">
+
+<!-- タイトル -->
+<div id="titleScreen" class="screen active">
+  <img class="bg" src="images/01.png" alt="">
+  <div class="overlay"></div>
+  <div class="content">
+    <h1>廃 屋 脱 出</h1>
+    <div class="sub">ABANDONED HOUSE ESCAPE</div>
+    <button id="startBtn">START</button>
+  </div>
+  <div style="position:absolute;bottom:14px;left:0;right:0;text-align:center;z-index:2;">
+    <div style="font-size:0.46rem;color:rgba(100,80,40,0.55);letter-spacing:0.1em;line-height:1.9;">
+      BGM：ユーフルカ（youfulca.com）<br>
+      声素材：びたちー素材館（vita-chi.net）
+    </div>
+  </div>
+</div>
+
+<!-- ストーリー -->
+<div id="storyScreen" class="screen">
+  <img class="story-bg" src="images/01.png" alt="">
+  <div class="story-content">
+    <div class="story-line" id="s0">肝試しのために訪れた、山奥の廃屋。</div>
+    <div class="story-line" id="s1">「絶対に出られない」と噂される心霊スポット。</div>
+    <div class="story-line" id="s2" style="margin-top:20px">気づいたとき——</div>
+    <div class="story-line red" id="s3">扉は、完全に閉ざされていた。</div>
+    <div class="story-line" id="s4" style="margin-top:20px;font-size:0.7rem;color:#6a5030">この家から、脱出しろ。</div>
+    <button id="storyNext">探索開始</button>
+  </div>
+</div>
+
+<!-- ゲーム -->
+<div id="gameScreen" class="screen">
+  <img id="roomImg" src="images/02.png" alt="">
+  <div id="topBar">
+    <div id="lifeWrap"><div class="lifeDot"></div><div class="lifeDot"></div><span style="margin-left:3px">×2</span></div>
+    <div id="topBtns">
+      <button class="topBtn" id="mapBtn">MAP</button>
+      <button class="topBtn" id="bagBtn">🎒</button>
+    </div>
+  </div>
+  <div id="hotspotLayer"></div>
+  <div id="navLayer"></div>
+  <div id="itemBar"></div>
+  <div id="roomLabel"></div>
+  <div id="textBox" class="hidden"></div>
+
+  <!-- メモ用紙拡大 -->
+  <div id="memoPopup">
+    <div class="memoCard">
+      <img src="images/07.png" alt="メモ用紙">
+      <div class="memoClose" id="memoClose">×</div>
+      <div class="memoHint">なにかのメモ用紙だ</div>
+    </div>
+  </div>
+
+  <!-- アイテム詳細 -->
+  <div id="itemDetail">
+    <div class="dcard">
+      <img id="detailImg" src="" alt="">
+      <div class="dname" id="detailName"></div>
+      <div class="ddesc" id="detailDesc"></div>
+      <button class="dclose" id="detailClose">閉じる</button>
+    </div>
+  </div>
+
+  <!-- パズル -->
+  <div id="puzzleBox">
+    <div class="ptitle">封印の数字を入力せよ</div>
+    <div class="psubtitle">4桁のコードで箱を開ける</div>
+    <div class="pinputs">
+      <input class="pdigit" maxlength="1" inputmode="numeric">
+      <input class="pdigit" maxlength="1" inputmode="numeric">
+      <input class="pdigit" maxlength="1" inputmode="numeric">
+      <input class="pdigit" maxlength="1" inputmode="numeric">
+    </div>
+    <div id="puzzleResult"></div>
+    <div class="pbtns">
+      <button class="pbtn cancel" id="puzzleCancel">戻る</button>
+      <button class="pbtn" id="puzzleSubmit">解錠</button>
+    </div>
+  </div>
+
+  <!-- ジャンプスケア -->
+  <div id="scareOverlay"><img id="scareImg" src="" alt=""></div>
+
+  <!-- アイテム入手ポップアップ -->
+  <div id="itemPopup">
+    <div class="card" id="popupCard">
+      <img id="popupImg" src="" alt="">
+      <div class="plabel">アイテム入手</div>
+      <div class="pname" id="popupName"></div>
+    </div>
+  </div>
+
+  <!-- MAP -->
+  <div id="mapPanel">
+    <div class="box">
+      <div class="mtitle">FLOOR MAP</div>
+      <div id="mapList"></div>
+      <div class="mclose">タップで閉じる</div>
+    </div>
+  </div>
+</div>
+
+<!-- エンディング -->
+<div id="endScreen" class="screen">
+  <div class="etitle">— 脱 出 —</div>
+  <div class="edesc">お札を扉に貼ると、重い扉がゆっくりと開いた。<br>外の冷たい空気が頬を打つ。<br>この家の闇は、まだそこにある。<br>あなたは走った。振り返らずに。</div>
+  <button class="ebtn" id="restartBtn">▶ もう一度</button>
+</div>
+
+</div></div>
+<script>
+// ══ プリロード ══
+['01','02','03','04','05','06','07','08','09','10','11','12','13'].forEach(n => {
+  const i = new Image(); i.src = `images/${n}.png`;
+});
+
+// ══ BGM ══
+const bgm = new Audio('sounds/BGM.mp3');
+bgm.loop = true;
+bgm.volume = 0.5;
+
+function startBGM() {
+  bgm.play().catch(() => {});
+}
+
+// ══ 効果音 ══
+const SCARE_SOUNDS = {
+  'images/09.png': new Audio('sounds/09.wav'),
+  'images/10.png': new Audio('sounds/10.wav'),
+  'images/11.png': new Audio('sounds/11.wav'),
+  'images/12.png': new Audio('sounds/12.wav'),
+  'images/13.png': new Audio('sounds/13.wav'),
+};
+Object.values(SCARE_SOUNDS).forEach(a => { a.volume = 0.8; });
+
+function playScareSound(imgSrc) {
+  const sound = SCARE_SOUNDS[imgSrc];
+  if (!sound) return;
+  sound.currentTime = 0;
+  sound.play().catch(() => {});
+}
+
+function stopScareSound(imgSrc) {
+  const sound = SCARE_SOUNDS[imgSrc];
+  if (!sound) return;
+  // フェードアウトして止める
+  const fadeOut = setInterval(() => {
+    if (sound.volume > 0.05) {
+      sound.volume = Math.max(0, sound.volume - 0.15);
+    } else {
+      sound.pause();
+      sound.currentTime = 0;
+      sound.volume = 0.8; // 次回のために音量を戻す
+      clearInterval(fadeOut);
+    }
+  }, 40);
+}
+
+const itemSound = new Audio('sounds/14.wav');
+itemSound.volume = 0.7;
+
+function playItemSound() {
+  itemSound.currentTime = 0;
+  itemSound.play().catch(() => {});
+}
+
+// ══ ゲームデータ ══
+const ROOMS = {
+  entrance: {
+    name:'玄関', img:'images/02.png',
+    text:'重い扉に手をかける。\n……開かない。閉じ込められたのか？',
+    hotspots:[
+      { id:'door', top:'30%', left:'20%', width:'55%', height:'60%', label:'扉', isDoor:true }
+    ],
+    nav:[{ dir:'right', target:'living', top:'42%', left:'82%' }]
+  },
+  living: {
+    name:'居間', img:'images/03.png',
+    text:'家具が朽ち、埃が積もった居間。空気が重い。',
+    hotspots:[
+      { id:'tansu', top:'48%', left:'62%', width:'22%', height:'18%', label:'タンス', scare:'images/09.png' }
+    ],
+    nav:[
+      { dir:'left',  target:'entrance', top:'42%', left:'6%'  },
+      { dir:'right', target:'bedroom',  top:'42%', left:'82%' },
+      { dir:'up',    target:'storage',  top:'15%', left:'45%' }
+    ]
+  },
+  bedroom: {
+    name:'寝室', img:'images/04.png',
+    text:'古びた寝室。誰かが寝ていたような跡が残る。',
+    hotspots:[
+      { id:'shelf', top:'55%', left:'2%', width:'28%', height:'30%', label:'枕元の棚',
+        isMemo:true,
+        item:{ id:'note', name:'メモ用紙', img:'images/07.png', desc:'なにかのメモ用紙だ。' } }
+    ],
+    nav:[
+      { dir:'left',  target:'living',  top:'42%', left:'6%'  },
+      { dir:'right', target:'kitchen', top:'42%', left:'82%' }
+    ]
+  },
+  kitchen: {
+    name:'キッチン', img:'images/05.png',
+    text:'錆びた調理器具が並ぶ。何かの気配がする。',
+    hotspots:[
+      { id:'window', top:'28%', left:'38%', width:'24%', height:'28%', label:'窓', scare:'images/11.png' }
+    ],
+    nav:[{ dir:'left', target:'bedroom', top:'42%', left:'6%' }]
+  },
+  storage: {
+    name:'物置部屋', img:'images/06.png',
+    text:'雑多なものが詰め込まれた物置。\n右下に数字錠のついた箱がある。',
+    hotspots:[
+      { id:'box', top:'70%', left:'54%', width:'34%', height:'22%', label:'数字錠の箱', isPuzzle:true }
+    ],
+    nav:[{ dir:'down', target:'living', top:'85%', left:'45%' }],
+    emptyTapScare: true
+  }
+};
+
+const MAP_ORDER = ['entrance','living','bedroom','kitchen','storage'];
+const MAP_LABELS = { entrance:'玄関', living:'居間', bedroom:'寝室', kitchen:'キッチン', storage:'物置部屋' };
+const SCARE_BEDROOM  = ['images/10.png'];
+const SCARE_DEFAULT  = ['images/12.png','images/13.png'];
+const PUZZLE_CODE = '4295';
+
+const state = {
+  room:'entrance', visited:{entrance:true},
+  found:{}, inventory:[],
+  tapCounts:{}, boxSolved:false
+};
+
+const $ = s => document.querySelector(s);
+const $$ = s => document.querySelectorAll(s);
+
+// ══ タイトル → ストーリー ══
+$('#startBtn').addEventListener('click', () => {
+  startBGM();
+  $('#titleScreen').classList.remove('active');
+  $('#storyScreen').classList.add('active');
+  runStory();
+});
+
+function runStory() {
+  const lines = ['s0','s1','s2','s3','s4'];
+  lines.forEach((id, i) => {
+    setTimeout(() => {
+      const el = $(`#${id}`);
+      if (el) el.classList.add('show');
+    }, 800 + i * 1000);
+  });
+  setTimeout(() => {
+    $('#storyNext').classList.add('show');
+  }, 800 + lines.length * 1000 + 400);
+}
+
+$('#storyNext').addEventListener('click', () => {
+  $('#storyScreen').classList.remove('active');
+  $('#gameScreen').classList.add('active');
+  renderRoom();
+});
+
+$('#restartBtn').addEventListener('click', () => location.reload());
+
+// ══ テキスト ══
+let textTimer = null;
+function showText(msg, isEvent=false) {
+  const box = $('#textBox');
+  box.classList.remove('hidden', 'ev');
+  box.style.transform = '';
+  box.style.opacity = '';
+  box.textContent = msg;
+  if (isEvent) box.classList.add('ev');
+  clearTimeout(textTimer);
+  textTimer = setTimeout(() => box.classList.add('hidden'), isEvent ? 5000 : 4000);
+}
+
+// ══ 部屋描画 ══
+function renderRoom() {
+  const room = ROOMS[state.room];
+  const img = $('#roomImg');
+  if (!img.src.endsWith(room.img)) {
+    img.classList.add('fading');
+    img.src = room.img;
+    img.onload = () => img.classList.remove('fading');
+    setTimeout(() => img.classList.remove('fading'), 500);
+  }
+  $('#roomLabel').textContent = room.name;
+
+  // ホットスポット
+  const hsLayer = $('#hotspotLayer');
+  hsLayer.innerHTML = '';
+  room.hotspots.forEach(hs => {
+    const key = `${state.room}_${hs.id}`;
+    const div = document.createElement('div');
+    div.className = 'hotspot';
+    div.style.cssText = `top:${hs.top};left:${hs.left};width:${hs.width};height:${hs.height}`;
+    const hint = document.createElement('div');
+    hint.className = 'hint';
+    hint.textContent = hs.label;
+    div.appendChild(hint);
+    div.addEventListener('click', e => { e.stopPropagation(); handleHotspot(hs, key); });
+    div.addEventListener('touchstart', () => div.classList.add('show-hint'), {passive:true});
+    div.addEventListener('touchend', () => setTimeout(() => div.classList.remove('show-hint'), 800), {passive:true});
+    hsLayer.appendChild(div);
+  });
+
+  // ナビ
+  const navLayer = $('#navLayer');
+  navLayer.innerHTML = '';
+  room.nav.forEach(n => {
+    const div = document.createElement('div');
+    div.className = 'navArrow';
+    div.style.cssText = `top:${n.top};left:${n.left}`;
+    div.textContent = {left:'◀',right:'▶',up:'▲',down:'▼'}[n.dir];
+    div.addEventListener('click', e => { e.stopPropagation(); goRoom(n.target); });
+    navLayer.appendChild(div);
+  });
+
+  // 空タップ（背景img）
+  $('#roomImg').onclick = e => { e.stopPropagation(); handleEmptyTap(); };
+
+  renderItemBar();
+  showText(room.text);
+}
+
+function goRoom(target) {
+  state.room = target;
+  state.visited[target] = true;
+  renderRoom();
+}
+
+// ══ ホットスポット ══
+function handleHotspot(hs, key) {
+  if (hs.isDoor) { doorAction(); return; }
+  if (hs.isPuzzle) { openPuzzle(); return; }
+  if (hs.scare) { triggerScare(hs.scare, ()=>{}); return; }
+  if (hs.isMemo || hs.item) {
+    if (!state.found[key]) {
+      state.found[key] = true;
+      addItem(hs.item);
+      renderRoom();
+    }
+    // メモ用紙はタップするたびに拡大表示
+    if (hs.isMemo) {
+      openMemo();
+    } else {
+      showItemDetail(hs.item);
+    }
+  }
+}
+
+// ══ ドア ══
+function doorAction() {
+  if (state.inventory.find(i => i.id === 'ofuda')) {
+    showEnding();
+  } else {
+    showText('扉に手をかける。\nびくともしない……開かない。', true);
+    setTimeout(() => triggerShake(), 300);
+  }
+}
+function triggerShake() {
+  const wrap = $('#gameWrap');
+  let c = 0;
+  const iv = setInterval(() => {
+    wrap.style.transform = c%2===0 ? 'translateX(-5px)' : 'translateX(5px)';
+    if (++c > 6) { clearInterval(iv); wrap.style.transform = ''; }
+  }, 50);
+}
+
+// ══ 空タップ ══
+function handleEmptyTap() {
+  const room = ROOMS[state.room];
+  // 物置も対象（emptyTapScare:true）に変更
+  const r = state.room;
+  state.tapCounts[r] = (state.tapCounts[r] || 0) + 1;
+  if (state.tapCounts[r] >= 10) {
+    state.tapCounts[r] = 0;
+    const pool = r === 'bedroom' ? SCARE_BEDROOM : SCARE_DEFAULT;
+    triggerScare(pool[Math.floor(Math.random() * pool.length)], ()=>{});
+  }
+}
+
+// ══ ジャンプスケア ══
+function triggerScare(imgSrc, cb) {
+  const overlay = $('#scareOverlay');
+  const si = $('#scareImg');
+  const show = () => {
+    overlay.style.display = 'block';
+    playScareSound(imgSrc);
+    if (navigator.vibrate) navigator.vibrate([80,40,120]);
+    setTimeout(() => {
+      overlay.style.display = 'none';
+      // ポップアップと同時に音を止める
+      stopScareSound(imgSrc);
+      cb();
+    }, 900);
+  };
+  if (si.src.endsWith(imgSrc.replace('images/','')) && si.complete && si.naturalWidth) {
+    show();
+  } else {
+    si.onload = show;
+    si.src = imgSrc;
+    setTimeout(() => { if (overlay.style.display !== 'block') show(); }, 350);
+  }
+}
+
+// ══ メモ用紙拡大 ══
+function openMemo() {
+  $('#memoPopup').classList.add('active');
+}
+$('#memoClose').addEventListener('click', () => {
+  $('#memoPopup').classList.remove('active');
+});
+
+// ══ アイテム ══
+function addItem(item) {
+  if (!item || state.inventory.find(i => i.id === item.id)) return;
+  state.inventory.push(item);
+  playItemSound();
+  showItemPopup(item);
+}
+
+function showItemPopup(item) {
+  const popup = $('#itemPopup');
+  const card = $('#popupCard');
+  $('#popupImg').src = item.img;
+  $('#popupName').textContent = item.name;
+  card.classList.remove('out');
+  popup.classList.add('active');
+  setTimeout(() => {
+    card.classList.add('out');
+    setTimeout(() => popup.classList.remove('active'), 350);
+  }, 2400);
+}
+
+function showItemDetail(item) {
+  if (!item) return;
+  $('#detailImg').src = item.img;
+  $('#detailName').textContent = item.name;
+  $('#detailDesc').textContent = item.desc || '';
+  $('#itemDetail').classList.add('active');
+}
+$('#detailClose').addEventListener('click', () => $('#itemDetail').classList.remove('active'));
+
+function renderItemBar() {
+  const bar = $('#itemBar');
+  bar.innerHTML = '';
+  state.inventory.forEach(item => {
+    const slot = document.createElement('div');
+    slot.className = 'itemSlot';
+    const img = document.createElement('img');
+    img.src = item.img;
+    slot.appendChild(img);
+    const lbl = document.createElement('div');
+    lbl.className = 'slotLabel';
+    lbl.textContent = item.name;
+    slot.appendChild(lbl);
+    slot.addEventListener('click', e => {
+      e.stopPropagation();
+      if (item.id === 'note') openMemo();
+      else showItemDetail(item);
+    });
+    bar.appendChild(slot);
+  });
+}
+
+// ══ パズル ══
+const pdigits = $$('.pdigit');
+
+pdigits.forEach((inp, i) => {
+  inp.addEventListener('input', () => {
+    inp.value = inp.value.replace(/\D/g,'').slice(0,1);
+    if (inp.value && i < pdigits.length - 1) pdigits[i+1].focus();
+  });
+  inp.addEventListener('keydown', e => {
+    if (e.key === 'Backspace' && !inp.value && i > 0) pdigits[i-1].focus();
+  });
+});
+
+function openPuzzle() {
+  const pb = $('#puzzleBox');
+  pb.classList.add('active');
+  $('#textBox').classList.add('hidden');
+  const res = $('#puzzleResult');
+
+  if (state.boxSolved) {
+    res.textContent = '✓ すでに解錠済み';
+    res.className = 'ok';
+    // 解錠済みならsubmitボタンを「閉じる」に変更
+    $('#puzzleSubmit').textContent = '閉じる';
+  } else {
+    pdigits.forEach(inp => inp.value = '');
+    res.textContent = '';
+    res.className = '';
+    $('#puzzleSubmit').textContent = '解錠';
+    setTimeout(() => pdigits[0].focus(), 100);
+  }
+}
+
+function closePuzzle() {
+  $('#puzzleBox').classList.remove('active');
+}
+
+$('#puzzleCancel').addEventListener('click', closePuzzle);
+
+$('#puzzleSubmit').addEventListener('click', () => {
+  if (state.boxSolved) { closePuzzle(); return; }
+
+  const code = Array.from(pdigits).map(d => d.value).join('');
+  const res = $('#puzzleResult');
+
+  if (code.length < 4) {
+    res.textContent = '4桁すべて入力せよ。';
+    res.className = 'ng';
+    return;
+  }
+
+  if (code === PUZZLE_CODE) {
+    // 正解
+    res.textContent = '✓ カチッ——解錠された！';
+    res.className = 'ok';
+    state.boxSolved = true;
+    state.found['storage_box'] = true;
+    $('#puzzleSubmit').textContent = '閉じる';
+
+    // 1.5秒後にポップアップを閉じてアイテム入手
+    setTimeout(() => {
+      closePuzzle();
+      addItem({
+        id: 'ofuda', name: 'お札', img: 'images/08.png',
+        desc: '古びた和紙に朱で書かれたお札。\n強い霊力を感じる。\nこれを玄関の扉に使えば……'
+      });
+      renderRoom();
+    }, 1500);
+
+  } else {
+    // 不正解
+    res.textContent = `「${code}」— 違う。箱は開かない。`;
+    res.className = 'ng';
+    if (navigator.vibrate) navigator.vibrate(250);
+    // 入力欄クリア
+    setTimeout(() => {
+      pdigits.forEach(inp => inp.value = '');
+      pdigits[0].focus();
+    }, 600);
+  }
+});
+
+// ══ MAP ══
+$('#mapBtn').addEventListener('click', e => {
+  e.stopPropagation();
+  const list = $('#mapList');
+  list.innerHTML = '';
+  MAP_ORDER.forEach(roomId => {
+    const row = document.createElement('div');
+    row.className = 'maprow';
+    const dot = document.createElement('div');
+    dot.className = 'mapdot' + (state.room===roomId?' cur':state.visited[roomId]?' vis':'');
+    row.appendChild(dot);
+    const span = document.createElement('span');
+    let txt = MAP_LABELS[roomId];
+    if (state.room===roomId) { txt+=' ◀'; span.style.color='#b89040'; }
+    else if (state.visited[roomId]) { span.style.color='#504020'; }
+    else { txt+=' （未）'; span.style.color='#1e1408'; }
+    span.textContent = txt;
+    row.appendChild(span);
+    list.appendChild(row);
+  });
+  $('#mapPanel').classList.add('active');
+});
+$('#mapPanel').addEventListener('click', () => $('#mapPanel').classList.remove('active'));
+
+// ══ バッグ ══
+$('#bagBtn').addEventListener('click', e => {
+  e.stopPropagation();
+  if (state.inventory.length === 0) {
+    showText('何も持っていない。', true);
+  } else {
+    const item = state.inventory[0];
+    if (item.id === 'note') openMemo();
+    else showItemDetail(item);
+  }
+});
+
+// ══ エンディング ══
+function showEnding() {
+  $('#gameScreen').classList.remove('active');
+  $('#endScreen').classList.add('active');
+}
+</script>
+</body>
+</html>
